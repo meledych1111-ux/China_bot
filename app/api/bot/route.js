@@ -5,7 +5,7 @@ import {
   getRandomWord,
   getWordsByCategory,
   getCategories,
-  removeEmojis  // ДОБАВЬТЕ ЭТО
+  removeEmojis
 } from '../../../lib/words.js';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -85,27 +85,29 @@ bot.action(/learn_(.+)/, async (ctx) => {
 bot.action('another_word', async (ctx) => {
   await ctx.deleteMessage();
   // Эмулируем нажатие кнопки "Случайное слово"
-  const mockUpdate = {
+  bot.handleUpdate({
+    update_id: Date.now(),
     message: { 
       text: '🔤 Случайное слово', 
       from: ctx.from, 
-      chat: ctx.chat 
+      chat: ctx.chat,
+      message_id: Date.now()
     }
-  };
-  await bot.handleUpdate(mockUpdate);
+  });
 });
 
 // Обработка "Начать викторину"
 bot.action('start_quiz', async (ctx) => {
   await ctx.deleteMessage();
-  const mockUpdate = {
+  bot.handleUpdate({
+    update_id: Date.now(),
     message: { 
       text: '🎯 Викторина', 
       from: ctx.from, 
-      chat: ctx.chat 
+      chat: ctx.chat,
+      message_id: Date.now()
     }
-  };
-  await bot.handleUpdate(mockUpdate);
+  });
 });
 
 // === Одновопросная викторина ===
@@ -148,19 +150,25 @@ bot.action(/ans_(.+)_(.+)/, async (ctx) => {
 // "Ещё вопрос" в викторине
 bot.action('more_quiz', async (ctx) => {
   await ctx.deleteMessage();
-  const mockUpdate = {
+  bot.handleUpdate({
+    update_id: Date.now(),
     message: { 
       text: '🎯 Викторина', 
       from: ctx.from, 
-      chat: ctx.chat 
+      chat: ctx.chat,
+      message_id: Date.now()
     }
-  };
-  await bot.handleUpdate(mockUpdate);
+  });
 });
 
 // Возврат в меню
 bot.action('back_menu', async (ctx) => {
-  await ctx.editMessageText('Главное меню:', mainMenu);
+  try {
+    await ctx.editMessageText('Главное меню:', mainMenu);
+  } catch (e) {
+    // Если не удалось отредактировать, отправляем новое сообщение
+    await ctx.reply('Главное меню:', mainMenu);
+  }
 });
 
 // === Карточки ===
@@ -190,14 +198,15 @@ bot.action(/reveal_(.+)_(.+)/, (ctx) => {
 // Следующая карточка
 bot.action('next_card', async (ctx) => {
   await ctx.deleteMessage();
-  const mockUpdate = {
+  bot.handleUpdate({
+    update_id: Date.now(),
     message: { 
       text: '📚 Карточки', 
       from: ctx.from, 
-      chat: ctx.chat 
+      chat: ctx.chat,
+      message_id: Date.now()
     }
-  };
-  await bot.handleUpdate(mockUpdate);
+  });
 });
 
 // === Категории ===
@@ -226,6 +235,12 @@ bot.hears('📊 Статистика', (ctx) => {
     `• Всего слов: *${total}*\n` +
     `• Категорий: *${cats}*`
   );
+});
+
+// === Обработка ошибок ===
+bot.catch((err, ctx) => {
+  console.error(`Ошибка для ${ctx.updateType}:`, err);
+  ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
 });
 
 // === Webhook обработчик ===
