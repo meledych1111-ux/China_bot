@@ -35,42 +35,43 @@ bot.start((ctx) => {
 
 bot.command('help', (ctx) => ctx.replyWithMarkdown(
   `*📖 Помощь и команды:*\n\n` +
-  `🔤 *Случайное слово* — изучайте новые слова\n` +
-  `📚 *Карточки* — два режима заучивания\n` +
-  `🎯 *Викторина* — тестируйте свои знания\n` +
+  `🔤 *Случайное слово* — изучайте новые слова с эмодзи для ассоциаций\n` +
+  `📚 *Карточки* — два режима заучивания (с эмодзи при обучении)\n` +
+  `🎯 *Викторина* — тестируйте знание иероглифов БЕЗ эмодзи\n` +
   `🏷️ *Категории* — учите слова по темам\n` +
   `📊 *Статистика* — общая информация\n\n` +
-  `_Используйте кнопки меню для навигации_`
+  `_Эмодзи помогают запоминать, но викторина проверяет знание чистых иероглифов!_`
 ));
 
 bot.hears('ℹ️ Помощь', (ctx) => ctx.replyWithMarkdown(
   `*📖 Помощь:*\n\n` +
-  `• Нажимай кнопки меню для навигации\n` +
-  `• В *викторине* — выбирай правильный перевод\n` +
-  `• В *карточках* — нажимай "Показать перевод" или "Показать иероглиф"\n` +
-  `• В *категориях* — нажми на категорию чтобы увидеть пример слова\n\n` +
-  `_Для начала просто нажми любую кнопку меню!_`
+  `• *Случайное слово* — показывает слова С эмодзи для запоминания\n` +
+  `• *Карточки* — в режиме обучения показывают эмодзи\n` +
+  `• *Викторина* — показывает иероглифы БЕЗ эмодзи (тест на знание)\n` +
+  `• *Категории* — на русском с количеством слов\n\n` +
+  `_Эмодзи — для запоминания, чистые иероглифы — для проверки знаний!_`
 ));
 
-// === Случайное слово с кнопками ===
+// === Случайное слово (С ЭМОДЗИ для запоминания) ===
 bot.hears('🔤 Случайное слово', async (ctx) => {
   const word = getRandomWord();
-  const cleanHanzi = removeEmojis(word.hanzi);
+  const cleanHanzi = removeEmojis(word.hanzi); // Для callback
   
   await ctx.replyWithMarkdown(
     `*🔤 Новое слово:*\n\n` +
-    `${cleanHanzi}\n` +  // Без эмодзи
+    `${word.hanzi}\n` +  // С ЭМОДЗИ для запоминания!
     `🗣️ *${word.pinyin}*\n` +
     `🇷🇺 *${word.translation}*\n\n` +
     `📝 *Пример:* ${word.example || '—'}\n` +
-    `🏷️ *Категория:* ${getCategoryName(word.category)}`,
+    `🏷️ *Категория:* ${getCategoryName(word.category)}\n\n` +
+    `_💡 Эмодзи помогают запомнить значение слова_`,
     Markup.inlineKeyboard([
       [
         Markup.button.callback('✅ Знаю', `know_${cleanHanzi}`),
         Markup.button.callback('📝 Учить', `learn_${cleanHanzi}`)
       ],
       [
-        Markup.button.callback('🎯 Викторина', 'start_quiz'),
+        Markup.button.callback('🎯 Проверить знание', 'start_quiz'),
         Markup.button.callback('🔁 Обратная карточка', 'reverse_card_from_random')
       ],
       [
@@ -95,13 +96,19 @@ bot.action(/learn_(.+)/, async (ctx) => {
 // === МЕНЮ КАРТОЧЕК ===
 bot.hears('📚 Карточки', async (ctx) => {
   await ctx.reply(
-    '📚 *Выберите режим карточек:*',
+    '📚 *Выберите режим карточек:*\n\n' +
+    '_💡 В режиме обучения показываются эмодзи для запоминания_\n' +
+    '_🎯 В режиме тестирования — только чистые иероглифы_',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
-          Markup.button.callback('🇨🇳 → 🇷🇺 Китайский → Русский', 'cards_normal'),
-          Markup.button.callback('🇷🇺 → 🇨🇳 Русский → Китайский', 'cards_reverse')
+          Markup.button.callback('🇨🇳 → 🇷🇺 Учить (с эмодзи)', 'cards_learn_normal'),
+          Markup.button.callback('🇷🇺 → 🇨🇳 Учить (с эмодзи)', 'cards_learn_reverse')
+        ],
+        [
+          Markup.button.callback('🇨🇳 → 🇷🇺 Тест (без эмодзи)', 'cards_test_normal'),
+          Markup.button.callback('🇷🇺 → 🇨🇳 Тест (без эмодзи)', 'cards_test_reverse')
         ],
         [
           Markup.button.callback('🎲 Случайный режим', 'cards_random'),
@@ -112,119 +119,193 @@ bot.hears('📚 Карточки', async (ctx) => {
   );
 });
 
-// === ОБЫЧНЫЕ КАРТОЧКИ (китайский → русский) ===
-bot.action('cards_normal', async (ctx) => {
+// === КАРТОЧКИ: РЕЖИМ ОБУЧЕНИЯ (С ЭМОДЗИ) ===
+
+// Обычные карточки - обучение (с эмодзи)
+bot.action('cards_learn_normal', async (ctx) => {
   await ctx.deleteMessage();
   const word = getRandomWord();
   const cleanHanzi = removeEmojis(word.hanzi);
   
   await ctx.replyWithMarkdown(
-    `*📚 Карточка (китайский → русский):*\n\n` +
-    `🇨🇳 *${cleanHanzi}*\n` +
+    `*📚 Карточка (обучение):*\n` +
+    `🇨🇳 → 🇷🇺 *с эмодзи*\n\n` +
+    `${word.hanzi}\n` +  // С ЭМОДЗИ для запоминания!
     `🗣️ ${word.pinyin}\n\n` +
     `_Нажми, чтобы увидеть перевод_`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Показать перевод', `reveal_normal_${cleanHanzi}_${word.translation}_${word.pinyin}`)],
+      [Markup.button.callback('👁️ Показать перевод', `reveal_learn_normal_${cleanHanzi}_${word.translation}_${word.pinyin}`)],
       [
-        Markup.button.callback('⏭️ Следующая', 'next_normal_card'),
-        Markup.button.callback('🔄 Сменить режим', 'switch_card_mode')
+        Markup.button.callback('⏭️ Следующая', 'next_learn_normal_card'),
+        Markup.button.callback('🎯 Тест (без эмодзи)', 'cards_test_normal')
       ],
       [Markup.button.callback('🏠 Меню', 'back_menu')]
     ])
   );
 });
 
-// Показать перевод в обычной карточке
-bot.action(/reveal_normal_(.+)_(.+)_(.+)/, (ctx) => {
+// Обратные карточки - обучение (с эмодзи в ответе)
+bot.action('cards_learn_reverse', async (ctx) => {
+  await ctx.deleteMessage();
+  const word = getRandomWord();
+  const cleanHanzi = removeEmojis(word.hanzi);
+  
+  await ctx.replyWithMarkdown(
+    `*🔁 Карточка (обучение):*\n` +
+    `🇷🇺 → 🇨🇳 *с эмодзи*\n\n` +
+    `🇷🇺 *${word.translation}*\n\n` +
+    `_Нажми, чтобы увидеть китайский иероглиф с эмодзи_`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👁️ Показать иероглиф', `reveal_learn_reverse_${cleanHanzi}_${word.pinyin}_${word.translation}_${word.hanzi}`)],
+      [
+        Markup.button.callback('⏭️ Следующая', 'next_learn_reverse_card'),
+        Markup.button.callback('🎯 Тест (без эмодзи)', 'cards_test_reverse')
+      ],
+      [Markup.button.callback('🏠 Меню', 'back_menu')]
+    ])
+  );
+});
+
+// === КАРТОЧКИ: РЕЖИМ ТЕСТИРОВАНИЯ (БЕЗ ЭМОДЗИ) ===
+
+// Обычные карточки - тест (без эмодзи)
+bot.action('cards_test_normal', async (ctx) => {
+  await ctx.deleteMessage();
+  const word = getRandomWord();
+  const cleanHanzi = removeEmojis(word.hanzi);
+  
+  await ctx.replyWithMarkdown(
+    `*🎯 Карточка (тест):*\n` +
+    `🇨🇳 → 🇷🇺 *без эмодзи*\n\n` +
+    `🇨🇳 *${cleanHanzi}*\n` +  // БЕЗ ЭМОДЗИ для тестирования!
+    `🗣️ ${word.pinyin}\n\n` +
+    `_Нажми, чтобы проверить перевод_`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👁️ Проверить перевод', `reveal_test_normal_${cleanHanzi}_${word.translation}_${word.pinyin}`)],
+      [
+        Markup.button.callback('⏭️ Следующая', 'next_test_normal_card'),
+        Markup.button.callback('📚 Учить (с эмодзи)', 'cards_learn_normal')
+      ],
+      [Markup.button.callback('🏠 Меню', 'back_menu')]
+    ])
+  );
+});
+
+// Обратные карточки - тест (без эмодзи)
+bot.action('cards_test_reverse', async (ctx) => {
+  await ctx.deleteMessage();
+  const word = getRandomWord();
+  const cleanHanzi = removeEmojis(word.hanzi);
+  
+  await ctx.replyWithMarkdown(
+    `*🎯 Карточка (тест):*\n` +
+    `🇷🇺 → 🇨🇳 *без эмодзи*\n\n` +
+    `🇷🇺 *${word.translation}*\n\n` +
+    `_Нажми, чтобы проверить знание иероглифа_`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👁️ Проверить иероглиф', `reveal_test_reverse_${cleanHanzi}_${word.pinyin}_${word.translation}`)],
+      [
+        Markup.button.callback('⏭️ Следующая', 'next_test_reverse_card'),
+        Markup.button.callback('📚 Учить (с эмодзи)', 'cards_learn_reverse')
+      ],
+      [Markup.button.callback('🏠 Меню', 'back_menu')]
+    ])
+  );
+});
+
+// === ОБРАБОТЧИКИ ПОКАЗА ДЛЯ РЕЖИМА ОБУЧЕНИЯ (с эмодзи) ===
+bot.action(/reveal_learn_normal_(.+)_(.+)_(.+)/, (ctx) => {
   const hanzi = ctx.match[1];
   const translation = ctx.match[2];
   const pinyin = ctx.match[3];
   ctx.answerCbQuery(
-    `🇷🇺 *Перевод:* ${translation}\n` +
-    `🗣️ *Пиньинь:* ${pinyin}\n` +
-    `🏷️ *Режим:* 🇨🇳 → 🇷🇺`,
+    `✅ *Правильный ответ:*\n` +
+    `🇷🇺 ${translation}\n` +
+    `🗣️ ${pinyin}\n` +
+    `🏷️ Режим: Обучение (с эмодзи)`,
     { show_alert: true }
   );
 });
 
-// Следующая обычная карточка
-bot.action('next_normal_card', async (ctx) => {
-  await ctx.deleteMessage();
-  bot.action('cards_normal', ctx);
-});
-
-// === ОБРАТНЫЕ КАРТОЧКИ (русский → китайский) ===
-bot.action('cards_reverse', async (ctx) => {
-  await ctx.deleteMessage();
-  const word = getRandomWord();
-  const cleanHanzi = removeEmojis(word.hanzi);
+bot.action(/reveal_learn_reverse_(.+)_(.+)_(.+)_(.+)/, (ctx) => {
+  const cleanHanzi = ctx.match[1];
+  const pinyin = ctx.match[2];
+  const translation = ctx.match[3];
+  const hanziWithEmojis = ctx.match[4];
   
-  await ctx.replyWithMarkdown(
-    `*🔁 Карточка (русский → китайский):*\n\n` +
-    `🇷🇺 *${word.translation}*\n\n` +
-    `_Нажми, чтобы увидеть китайский иероглиф_`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Показать иероглиф', `reveal_reverse_${cleanHanzi}_${word.pinyin}_${word.translation}`)],
-      [
-        Markup.button.callback('⏭️ Следующая', 'next_reverse_card'),
-        Markup.button.callback('🔄 Сменить режим', 'switch_card_mode')
-      ],
-      [Markup.button.callback('🏠 Меню', 'back_menu')]
-    ])
+  ctx.answerCbQuery(
+    `✅ *Правильный ответ:*\n` +
+    `🇨🇳 ${hanziWithEmojis}\n` +  // С ЭМОДЗИ в обучении!
+    `🗣️ ${pinyin}\n` +
+    `🇷🇺 ${translation}\n` +
+    `🏷️ Режим: Обучение (с эмодзи)`,
+    { show_alert: true }
   );
 });
 
-// Показать иероглиф в обратной карточке
-bot.action(/reveal_reverse_(.+)_(.+)_(.+)/, (ctx) => {
+// === ОБРАБОТЧИКИ ПОКАЗА ДЛЯ РЕЖИМА ТЕСТИРОВАНИЯ (без эмодзи) ===
+bot.action(/reveal_test_normal_(.+)_(.+)_(.+)/, (ctx) => {
+  const hanzi = ctx.match[1];
+  const translation = ctx.match[2];
+  const pinyin = ctx.match[3];
+  ctx.answerCbQuery(
+    `✅ *Правильный ответ:*\n` +
+    `🇷🇺 ${translation}\n` +
+    `🗣️ ${pinyin}\n` +
+    `🏷️ Режим: Тест (без эмодзи)`,
+    { show_alert: true }
+  );
+});
+
+bot.action(/reveal_test_reverse_(.+)_(.+)_(.+)/, (ctx) => {
   const hanzi = ctx.match[1];
   const pinyin = ctx.match[2];
   const translation = ctx.match[3];
   ctx.answerCbQuery(
-    `🇨🇳 *Иероглиф:* ${hanzi}\n` +
-    `🗣️ *Пиньинь:* ${pinyin}\n` +
-    `🇷🇺 *Перевод:* ${translation}\n` +
-    `🏷️ *Режим:* 🇷🇺 → 🇨🇳`,
+    `✅ *Правильный ответ:*\n` +
+    `🇨🇳 ${hanzi}\n` +  // БЕЗ ЭМОДЗИ в тесте!
+    `🗣️ ${pinyin}\n` +
+    `🇷🇺 ${translation}\n` +
+    `🏷️ Режим: Тест (без эмодзи)`,
     { show_alert: true }
   );
 });
 
-// Следующая обратная карточка
-bot.action('next_reverse_card', async (ctx) => {
-  await ctx.deleteMessage();
-  bot.action('cards_reverse', ctx);
-});
+// === ОБРАБОТЧИКИ СЛЕДУЮЩИХ КАРТОЧЕК ===
+const cardHandlers = {
+  'next_learn_normal_card': 'cards_learn_normal',
+  'next_learn_reverse_card': 'cards_learn_reverse',
+  'next_test_normal_card': 'cards_test_normal',
+  'next_test_reverse_card': 'cards_test_reverse'
+};
+
+for (const [action, handler] of Object.entries(cardHandlers)) {
+  bot.action(action, async (ctx) => {
+    await ctx.deleteMessage();
+    bot.action(handler, ctx);
+  });
+}
 
 // Случайный режим карточек
 bot.action('cards_random', async (ctx) => {
   await ctx.deleteMessage();
-  const randomMode = Math.random() > 0.5 ? 'cards_normal' : 'cards_reverse';
+  const modes = ['cards_learn_normal', 'cards_learn_reverse', 'cards_test_normal', 'cards_test_reverse'];
+  const randomMode = modes[Math.floor(Math.random() * modes.length)];
   bot.action(randomMode, ctx);
 });
 
-// Переключение режима карточек
-bot.action('switch_card_mode', async (ctx) => {
-  await ctx.deleteMessage();
-  bot.handleUpdate({
-    update_id: Date.now(),
-    message: { 
-      text: '📚 Карточки', 
-      from: ctx.from, 
-      chat: ctx.chat,
-      message_id: Date.now()
-    }
-  });
-});
+// Переключение между режимами
+const switchHandlers = {
+  'cards_learn_normal': 'cards_test_normal',
+  'cards_learn_reverse': 'cards_test_reverse',
+  'cards_test_normal': 'cards_learn_normal',
+  'cards_test_reverse': 'cards_learn_reverse'
+};
 
-// Обратная карточка из случайного слова
-bot.action('reverse_card_from_random', async (ctx) => {
-  await ctx.deleteMessage();
-  bot.action('cards_reverse', ctx);
-});
-
-// === ВИКТОРИНА ===
+// === ВИКТОРИНА (ВСЕГДА БЕЗ ЭМОДЗИ для проверки знаний) ===
 bot.hears('🎯 Викторина', async (ctx) => {
   const word = getRandomWord();
-  const cleanHanzi = removeEmojis(word.hanzi);
+  const cleanHanzi = removeEmojis(word.hanzi); // БЕЗ эмодзи!
   
   let options = [word.translation];
   while (options.length < 4) {
@@ -234,37 +315,54 @@ bot.hears('🎯 Викторина', async (ctx) => {
   const shuffled = options.sort(() => Math.random() - 0.5);
 
   await ctx.replyWithMarkdown(
-    `*🎯 Вопрос:*\nЧто означает:\n\n` +
-    `🇨🇳 *${cleanHanzi}* ?\n` +
-    `🗣️ ${word.pinyin}`,
+    `*🎯 Викторина (тест на знание иероглифов):*\n\n` +
+    `Что означает:\n\n` +
+    `🇨🇳 *${cleanHanzi}* ?\n` +  // БЕЗ ЭМОДЗИ!
+    `_💡 Эмодзи не показываются, чтобы проверить реальное знание_`,
     Markup.inlineKeyboard(
-      shuffled.map(opt => [Markup.button.callback(opt, `ans_${opt}_${word.translation}`)])
+      shuffled.map(opt => [Markup.button.callback(opt, `ans_${opt}_${word.translation}_${cleanHanzi}`)])
     )
   );
 });
 
 // Обработка ответов в викторине
-bot.action(/ans_(.+)_(.+)/, async (ctx) => {
+bot.action(/ans_(.+)_(.+)_(.+)/, async (ctx) => {
   const userAnswer = ctx.match[1];
   const correct = ctx.match[2];
+  const hanzi = ctx.match[3];
   const isCorrect = userAnswer === correct;
   
-  await ctx.answerCbQuery(isCorrect ? '✅ Верно!' : `❌ Правильно: ${correct}`);
+  // Получаем слово чтобы показать его с эмодзи в ответе
+  const wordObj = words.find(w => removeEmojis(w.hanzi) === hanzi) || getRandomWord();
   
-  // Предложить продолжить
-  await ctx.reply(
-    isCorrect ? 
-    `✅ *Правильно!*\nХотите продолжить?` : 
-    `❌ *Неправильно.*\nПопробуем ещё?`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
+  if (isCorrect) {
+    await ctx.answerCbQuery('✅ Верно!');
+    await ctx.replyWithMarkdown(
+      `✅ *Отлично!* Ты правильно перевёл:\n\n` +
+      `${wordObj.hanzi}\n` +  // С ЭМОДЗИ в правильном ответе
+      `🗣️ *${wordObj.pinyin}*\n` +
+      `🇷🇺 *${wordObj.translation}*`,
+      Markup.inlineKeyboard([
         [Markup.button.callback('🔄 Ещё вопрос', 'more_quiz')],
-        [Markup.button.callback('📚 К карточкам', 'to_cards')],
+        [Markup.button.callback('📚 Учить это слово (с эмодзи)', `learn_${hanzi}`)],
         [Markup.button.callback('🏠 Меню', 'back_menu')]
       ])
-    }
-  );
+    );
+  } else {
+    await ctx.answerCbQuery(`❌ Правильно: ${correct}`);
+    await ctx.replyWithMarkdown(
+      `❌ *Правильный ответ:*\n\n` +
+      `${wordObj.hanzi}\n` +  // С ЭМОДЗИ в правильном ответе
+      `🗣️ *${wordObj.pinyin}*\n` +
+      `🇷🇺 *${wordObj.translation}*\n\n` +
+      `_Твой ответ: ${userAnswer}_`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Ещё вопрос', 'more_quiz')],
+        [Markup.button.callback('📚 Учить это слово (с эмодзи)', `learn_${hanzi}`)],
+        [Markup.button.callback('🏠 Меню', 'back_menu')]
+      ])
+    );
+  }
 });
 
 // "Ещё вопрос" в викторине
@@ -281,25 +379,11 @@ bot.action('more_quiz', async (ctx) => {
   });
 });
 
-// Переход к карточкам из викторины
-bot.action('to_cards', async (ctx) => {
-  await ctx.deleteMessage();
-  bot.handleUpdate({
-    update_id: Date.now(),
-    message: { 
-      text: '📚 Карточки', 
-      from: ctx.from, 
-      chat: ctx.chat,
-      message_id: Date.now()
-    }
-  });
-});
-
-// === КАТЕГОРИИ НА РУССКОМ ===
+// === КАТЕГОРИИ НА РУССКОМ (с показом слова С ЭМОДЗИ) ===
 bot.hears('🏷️ Категории', async (ctx) => {
   const categories = getCategoriesWithNames();
   
-  // Группируем кнопки по 2 в ряд для лучшего отображения
+  // Группируем кнопки по 2 в ряд
   const buttons = [];
   for (let i = 0; i < categories.length; i += 2) {
     const row = [];
@@ -324,11 +408,11 @@ bot.hears('🏷️ Категории', async (ctx) => {
     }
   }
   
-  buttons.push([Markup.button.callback('🎲 Случайное слово из любой категории', 'cat_random')]);
+  buttons.push([Markup.button.callback('🎲 Случайное слово', 'cat_random')]);
   buttons.push([Markup.button.callback('🏠 Главное меню', 'back_menu')]);
   
   await ctx.reply(
-    '📂 *Выберите категорию:*\n_Нажмите на категорию, чтобы увидеть пример слова_',
+    '📂 *Выберите категорию:*\n_Нажмите на категорию, чтобы увидеть пример слова с эмодзи_',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
@@ -345,7 +429,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
     const cleanHanzi = removeEmojis(word.hanzi);
     await ctx.answerCbQuery(
       `🎲 *Случайное слово:*\n\n` +
-      `🇨🇳 ${cleanHanzi}\n` +
+      `${word.hanzi}\n` +  // С ЭМОДЗИ
       `🗣️ ${word.pinyin}\n` +
       `🇷🇺 ${word.translation}\n` +
       `🏷️ ${getCategoryName(word.category)}`,
@@ -362,12 +446,11 @@ bot.action(/cat_(.+)/, async (ctx) => {
   }
   
   const word = list[Math.floor(Math.random() * list.length)];
-  const cleanHanzi = removeEmojis(word.hanzi);
   
   await ctx.answerCbQuery(
     `📂 *${categoryName}*\n` +
     `📚 Слов в категории: ${list.length}\n\n` +
-    `🇨🇳 ${cleanHanzi}\n` +
+    `${word.hanzi}\n` +  // С ЭМОДЗИ
     `🗣️ ${word.pinyin}\n` +
     `🇷🇺 ${word.translation}\n\n` +
     `📝 ${word.example || ''}`,
@@ -380,7 +463,6 @@ bot.hears('📊 Статистика', (ctx) => {
   const total = words.length;
   const cats = getCategories().length;
   
-  // Подсчитываем слова по категориям
   const categoryStats = getCategoriesWithNames()
     .map(cat => {
       const count = getWordsByCategory(cat.english).length;
@@ -393,7 +475,7 @@ bot.hears('📊 Статистика', (ctx) => {
     `📚 *Всего слов:* ${total}\n` +
     `🏷️ *Категорий:* ${cats}\n\n` +
     `*По категориям:*\n${categoryStats}\n\n` +
-    `_Продолжайте учиться! 📖_`
+    `_💡 Используйте эмодзи для запоминания, а викторину — для проверки знаний!_`
   );
 });
 
@@ -424,15 +506,20 @@ bot.action('start_quiz', async (ctx) => {
   });
 });
 
+bot.action('reverse_card_from_random', async (ctx) => {
+  await ctx.deleteMessage();
+  // Случайно выбираем режим обучения или теста для обратных карточек
+  const randomMode = Math.random() > 0.5 ? 'cards_learn_reverse' : 'cards_test_reverse';
+  bot.action(randomMode, ctx);
+});
+
 bot.action('back_menu', async (ctx) => {
   try {
-    // Пытаемся отредактировать сообщение
     await ctx.editMessageText('Главное меню:', {
       ...mainMenu,
       parse_mode: 'Markdown'
     });
   } catch (e) {
-    // Если не удалось отредактировать (например, старое сообщение), отправляем новое
     await ctx.reply('Главное меню:', mainMenu);
   }
 });
@@ -466,11 +553,13 @@ export async function GET() {
     JSON.stringify({ 
       ok: true, 
       message: 'Chinese Learning Bot is running',
-      stats: {
-        totalWords: words.length,
-        categories: getCategories().length,
-        endpoints: ['POST /api/bot - Telegram webhook handler']
-      }
+      features: [
+        '🔤 Случайные слова с эмодзи для запоминания',
+        '📚 Два режима карточек: обучение (с эмодзи) и тест (без эмодзи)',
+        '🎯 Викторина для проверки знаний без эмодзи',
+        '🏷️ Категории на русском с примерами слов',
+        '📊 Статистика по словам и категориям'
+      ]
     }), 
     {
       headers: { 
