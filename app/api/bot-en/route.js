@@ -8,8 +8,7 @@ import {
   getCategoryName,
   getCategoriesWithNames,
   removeEmojis
-} from '../../../../lib/words-en.js';
-
+} from '../../../lib/words-en.js';
 const bot = new Telegraf(process.env.BOT_TOKEN_EN);
 
 // === Главное меню ===
