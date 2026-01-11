@@ -1,9 +1,33 @@
 {
+  "name": "chinese-learning-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for learning Chinese vocabulary with quizzes, flashcards, and categories",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "telemetry:disable": "next telemetry disable"
+  },
   "dependencies": {
     "@upstash/redis": "^1.35.0",
-    "telegraf": "^4.16.3",
     "next": "16.1.1",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
-  }
+    "react-dom": "19.0.0",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-next": "16.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meledych1111-ux/China_bot.git"
+  },
+  "author": "Igora",
+  "license": "MIT"
 }
