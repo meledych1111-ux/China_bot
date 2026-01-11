@@ -2,606 +2,467 @@
 import { Telegraf, Markup } from 'telegraf';
 import { words, getRandomWord, getWordsByCategory, getCategories } from '../../../lib/words.js';
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-
-// Хранилище состояния пользователей (в реальном проекте используйте базу данных)
-const userStates = new Map();
-
-// Главное меню
-const mainMenu = Markup.keyboard([
-  ['🎲 Случайное слово', '🎯 Викторина'],
-  ['📚 Карточки', '📊 Статистика'],
-  ['🗂️ По категориям', '🎮 Игра "Угадай слово"']
-]).resize();
-
-// Меню категорий
-function getCategoriesMenu() {
-  const categories = getCategories();
-  const buttons = [];
-  
-  // Создаем кнопки по 2 в ряд
-  for (let i = 0; i < categories.length; i += 2) {
-    const row = [];
-    if (categories[i]) row.push({ text: categories[i], callback_data: `cat_${categories[i]}` });
-    if (categories[i + 1]) row.push({ text: categories[i + 1], callback_data: `cat_${categories[i + 1]}` });
-    buttons.push(row);
-  }
-  
-  buttons.push([{ text: '🏠 Главное меню', callback_data: 'main_menu' }]);
-  
-  return Markup.inlineKeyboard(buttons);
+// Убираем предупреждения в production
+if (process.env.NODE_ENV === 'production') {
+  process.removeAllListeners('warning');
 }
+
+// Инициализируем бота с опциями для Vercel
+const bot = new Telegraf(process.env.BOT_TOKEN, {
+  telegram: {
+    apiRoot: 'https://api.telegram.org',
+    webhookReply: true
+  }
+});
+
+// Временное хранилище сессий (в production лучше использовать Redis)
+const sessions = new Map();
+
+// Меню
+const mainMenu = Markup.keyboard([
+  ['🔤 Случайное слово', '📚 Карточки'],
+  ['🎯 Викторина', '📊 Прогресс'],
+  ['🏷️ Категории', 'ℹ️ Помощь']
+]).resize().oneTime();
 
 // Команда /start
 bot.start((ctx) => {
-  ctx.reply(
-    '🇨🇳 *Добро пожаловать в бота для изучения китайского!*\n\n' +
-    '📚 Я помогу тебе:\n' +
-    '• Учить новые слова с карточками\n' +
-    '• Проверять знания в викторинах\n' +
-    '• Тренироваться по категориям\n' +
-    '• Отслеживать прогресс\n\n' +
-    '👇 Выбери действие в меню ниже:',
-    { parse_mode: 'Markdown', ...mainMenu }
+  ctx.replyWithMarkdown(
+    `🇨🇳 *Добро пожаловать, ${ctx.from.first_name || 'друг'}!*\n\n` +
+    `Я помогу тебе выучить китайский язык.\n\n` +
+    `*📊 Статистика:*\n` +
+    `• Слов в базе: *${words.length}*\n` +
+    `• Категорий: *${getCategories().length}*\n\n` +
+    `👇 Выбери действие в меню ниже:`,
+    mainMenu
   );
 });
 
 // Команда /help
 bot.help((ctx) => {
-  ctx.reply(
-    '*📖 Доступные команды:*\n\n' +
-    '🎲 *Случайное слово* — изучай новое слово каждый день\n' +
-    '🎯 *Викторина* — проверь свои знания в тесте\n' +
-    '📚 *Карточки* — режим изучения по карточкам\n' +
-    '🗂️ *По категориям* — учи слова по темам\n' +
-    '🎮 *Игра "Угадай слово"* — увлекательная игра на запоминание\n' +
-    '📊 *Статистика* — твой прогресс изучения\n\n' +
-    '💡 *Совет:* Начни с карточек, а потом проверь себя в викторине!',
-    { parse_mode: 'Markdown', ...mainMenu }
+  ctx.replyWithMarkdown(
+    '*📖 Команды бота:*\n\n' +
+    '🔤 *Случайное слово* — изучай новое слово\n' +
+    '📚 *Карточки* — режим заучивания\n' +
+    '🎯 *Викторина* — тест на знание слов\n' +
+    '🏷️ *Категории* — слова по темам\n' +
+    '📊 *Прогресс* — твоя статистика\n\n' +
+    '*💡 Быстрые команды:*\n' +
+    '/start — Главное меню\n' +
+    '/word — Случайное слово\n' +
+    '/quiz — Начать викторину\n' +
+    '/cards — Режим карточек\n' +
+    '/stats — Статистика'
   );
 });
 
-// Обработчик текстовых сообщений (кнопки меню)
-bot.hears('🎲 Случайное слово', async (ctx) => {
+// Текстовые команды
+bot.hears('🔤 Случайное слово', sendRandomWord);
+bot.hears('📚 Карточки', startCards);
+bot.hears('🎯 Викторина', startQuiz);
+bot.hears('🏷️ Категории', showCategories);
+bot.hears('📊 Прогресс', showStats);
+bot.hears('ℹ️ Помощь', (ctx) => ctx.reply('Используй меню или команды 👆'));
+
+// Команды через слэш
+bot.command('word', sendRandomWord);
+bot.command('cards', startCards);
+bot.command('quiz', startQuiz);
+bot.command('stats', showStats);
+
+// Функция отправки случайного слова
+async function sendRandomWord(ctx) {
   const word = getRandomWord();
-  await sendWordCard(ctx, word);
-});
-
-bot.hears('🎯 Викторина', (ctx) => startQuiz(ctx));
-bot.hears('📚 Карточки', (ctx) => startFlashcards(ctx));
-bot.hears('🗂️ По категориям', (ctx) => showCategories(ctx));
-bot.hears('🎮 Игра "Угадай слово"', (ctx) => startWordGame(ctx));
-bot.hears('📊 Статистика', (ctx) => showStats(ctx));
-bot.hears('🏠 Главное меню', (ctx) => ctx.reply('Выбери действие:', mainMenu));
-
-// Функция для показа категорий
-async function showCategories(ctx) {
-  ctx.reply(
-    '*🗂️ Выбери категорию для изучения:*\n\n' +
-    '👇 Нажми на кнопку с нужной темой:',
-    { 
-      parse_mode: 'Markdown',
-      ...getCategoriesMenu()
-    }
-  );
-}
-
-// Обработчик выбора категории
-bot.action(/cat_(.+)/, async (ctx) => {
-  const category = ctx.match[1];
-  const categoryWords = getWordsByCategory(category);
+  const keyboard = Markup.inlineKeyboard([
+    [
+      Markup.button.callback('✅ Знаю', `know_${word.hanzi}`),
+      Markup.button.callback('❌ Учить', `learn_${word.hanzi}`)
+    ],
+    [
+      Markup.button.callback('🎯 Викторина', `quiz_from_${word.hanzi}`),
+      Markup.button.callback('🔤 Ещё слово', 'another_word')
+    ]
+  ]);
   
-  if (categoryWords.length === 0) {
-    return ctx.answerCbQuery('В этой категории пока нет слов', true);
-  }
-  
-  userStates.set(ctx.from.id, { mode: 'category', category, index: 0 });
-  
-  await ctx.editMessageText(
-    `*${category}*\n\n` +
-    `📊 Слов в категории: ${categoryWords.length}\n` +
-    `👇 Выбери режим изучения:`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          { text: '📖 Учить по очереди', callback_data: `learn_${category}` },
-          { text: '🎯 Викторина по теме', callback_data: `quiz_${category}` }
-        ],
-        [{ text: '🔙 Назад к категориям', callback_data: 'back_categories' }]
-      ])
-    }
-  );
-});
-
-// Режим карточек
-async function startFlashcards(ctx) {
-  userStates.set(ctx.from.id, { 
-    mode: 'flashcards', 
-    index: 0,
-    correct: 0,
-    total: 0
-  });
-  
-  await sendNextFlashcard(ctx);
-}
-
-// Отправка следующей карточки
-async function sendNextFlashcard(ctx) {
-  const state = userStates.get(ctx.from.id);
-  if (!state || state.mode !== 'flashcards') return;
-  
-  const word = words[state.index];
-  
-  await ctx.reply(
-    `*📚 Карточка ${state.index + 1}/${words.length}*\n\n` +
-    `🔤 *${word.hanzi}*\n` +
-    `🗣️ ${word.pinyin}\n\n` +
-    `💡 _Нажми "Показать перевод", когда будешь готов_`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          { text: '👁️ Показать перевод', callback_data: `show_${state.index}` },
-          { text: '⏭️ Следующая', callback_data: 'next_card' }
-        ],
-        [{ text: '🏁 Завершить', callback_data: 'end_cards' }]
-      ])
-    }
-  );
-}
-
-// Показать перевод карточки
-bot.action(/show_(\d+)/, async (ctx) => {
-  const index = parseInt(ctx.match[1]);
-  const word = words[index];
-  
-  await ctx.editMessageText(
-    `*📚 Карточка ${index + 1}/${words.length}*\n\n` +
-    `🔤 *${word.hanzi}*\n` +
-    `🗣️ ${word.pinyin}\n` +
-    `🇷🇺 *${word.translation}*\n\n` +
-    `📝 Пример: ${word.example || '—'}\n` +
-    `🏷️ Категория: ${word.category}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          { text: '✅ Я знал', callback_data: `knew_${index}` },
-          { text: '❌ Не знал', callback_data: `not_knew_${index}` }
-        ],
-        [{ text: '➡️ Продолжить', callback_data: 'next_card' }]
-      ])
-    }
-  );
-});
-
-// Обработка ответа в карточках
-bot.action(/knew_(\d+)/, async (ctx) => {
-  const state = userStates.get(ctx.from.id);
-  if (state) {
-    state.correct++;
-    state.total++;
-  }
-  await ctx.answerCbQuery('✅ Отлично! Запомни это слово!');
-});
-
-bot.action(/not_knew_(\d+)/, async (ctx) => {
-  const state = userStates.get(ctx.from.id);
-  if (state) {
-    state.total++;
-  }
-  await ctx.answerCbQuery('📝 Запомни это слово!');
-});
-
-// Следующая карточка
-bot.action('next_card', async (ctx) => {
-  const state = userStates.get(ctx.from.id);
-  if (state) {
-    state.index = (state.index + 1) % words.length;
-    if (state.index === 0) {
-      // Прошли все карточки
-      await ctx.editMessageText(
-        `🎉 *Ты прошел все карточки!*\n\n` +
-        `📊 Результат: ${state.correct}/${state.total}\n` +
-        `✅ Процент правильных: ${Math.round((state.correct / state.total) * 100)}%\n\n` +
-        `Хочешь повторить?`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              { text: '🔄 Повторить', callback_data: 'restart_cards' },
-              { text: '🎯 Викторина', callback_data: 'start_quiz' }
-            ],
-            [{ text: '🏠 Главное меню', callback_data: 'main_menu' }]
-          ])
-        }
-      );
-      return;
-    }
-  }
-  await sendNextFlashcard(ctx);
-});
-
-// Начать викторину
-async function startQuiz(ctx) {
-  userStates.set(ctx.from.id, { 
-    mode: 'quiz', 
-    score: 0,
-    total: 0,
-    questions: []
-  });
-  
-  await sendQuizQuestion(ctx);
-}
-
-// Отправка вопроса викторины
-async function sendQuizQuestion(ctx) {
-  const state = userStates.get(ctx.from.id);
-  if (!state) return;
-  
-  const correct = getRandomWord();
-  const options = [correct.translation];
-  
-  // Добавляем 3 неверных варианта
-  while (options.length < 4) {
-    const word = getRandomWord();
-    if (!options.includes(word.translation)) {
-      options.push(word.translation);
-    }
-  }
-  
-  // Сохраняем правильный ответ
-  state.currentCorrect = correct.translation;
-  state.questions.push({
-    word: correct,
-    answered: false,
-    correct: false
-  });
-  
-  // Перемешиваем варианты
-  const shuffled = options.sort(() => 0.5 - Math.random());
-  
-  await ctx.reply(
-    `*🎯 Вопрос ${state.questions.length}*\n\n` +
-    `Что означает слово:\n\n` +
-    `🔤 *${correct.hanzi}*\n` +
-    `🗣️ ${correct.pinyin}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        shuffled.map(opt => [{ 
-          text: opt, 
-          callback_data: `ans_${opt}` 
-        }]),
-        [{ text: '🏁 Завершить викторину', callback_data: 'end_quiz' }]
-      ])
-    }
-  );
-}
-
-// Обработка ответа в викторине
-bot.action(/ans_(.+)/, async (ctx) => {
-  const answer = ctx.match[1];
-  const state = userStates.get(ctx.from.id);
-  
-  if (!state || state.mode !== 'quiz') return;
-  
-  const lastQuestion = state.questions[state.questions.length - 1];
-  lastQuestion.answered = true;
-  lastQuestion.userAnswer = answer;
-  lastQuestion.correct = (answer === state.currentCorrect);
-  
-  state.total++;
-  if (lastQuestion.correct) {
-    state.score++;
-    await ctx.answerCbQuery('✅ Верно! Молодец!');
-  } else {
-    await ctx.answerCbQuery(`❌ Неверно! Правильно: ${state.currentCorrect}`);
-  }
-  
-  // Показываем правильный ответ
-  await ctx.editMessageText(
-    `*${lastQuestion.correct ? '✅ Верно!' : '❌ Неверно!'}*\n\n` +
-    `🔤 ${lastQuestion.word.hanzi}\n` +
-    `🗣️ ${lastQuestion.word.pinyin}\n` +
-    `🇷🇺 *${lastQuestion.word.translation}*\n\n` +
-    `📝 ${lastQuestion.word.example || ''}\n\n` +
-    `📊 Твой счёт: ${state.score}/${state.total}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [{ text: '➡️ Следующий вопрос', callback_data: 'next_question' }],
-        [{ text: '🏁 Завершить викторину', callback_data: 'end_quiz' }]
-      ])
-    }
-  );
-});
-
-// Следующий вопрос
-bot.action('next_question', async (ctx) => {
-  await sendQuizQuestion(ctx);
-});
-
-// Игра "Угадай слово"
-async function startWordGame(ctx) {
-  userStates.set(ctx.from.id, {
-    mode: 'wordgame',
-    score: 0,
-    streak: 0,
-    maxStreak: 0,
-    lives: 3
-  });
-  
-  await sendWordGameQuestion(ctx);
-}
-
-async function sendWordGameQuestion(ctx) {
-  const state = userStates.get(ctx.from.id);
-  if (!state || state.lives <= 0) {
-    await endWordGame(ctx);
-    return;
-  }
-  
-  const correct = getRandomWord();
-  const options = [correct.translation];
-  
-  while (options.length < 3) {
-    const word = getRandomWord();
-    if (!options.includes(word.translation)) {
-      options.push(word.translation);
-    }
-  }
-  
-  state.currentCorrect = correct.translation;
-  
-  const shuffled = options.sort(() => 0.5 - Math.random());
-  
-  await ctx.reply(
-    `*🎮 Угадай слово!*\n\n` +
-    `🔤 *${correct.hanzi}*\n` +
-    `🗣️ ${correct.pinyin}\n\n` +
-    `📊 Счёт: ${state.score} | 🏆 Серия: ${state.streak} | ❤️ Жизни: ${'❤️'.repeat(state.lives)}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        shuffled.map(opt => [{ 
-          text: opt, 
-          callback_data: `game_${opt}` 
-        }]),
-        [{ text: '🏁 Закончить игру', callback_data: 'end_game' }]
-      ])
-    }
-  );
-}
-
-// Обработка ответа в игре
-bot.action(/game_(.+)/, async (ctx) => {
-  const answer = ctx.match[1];
-  const state = userStates.get(ctx.from.id);
-  
-  if (!state) return;
-  
-  if (answer === state.currentCorrect) {
-    state.score += 10;
-    state.streak++;
-    state.maxStreak = Math.max(state.maxStreak, state.streak);
-    await ctx.answerCbQuery(`✅ Правильно! +10 очков! Серия: ${state.streak}`);
-  } else {
-    state.lives--;
-    state.streak = 0;
-    await ctx.answerCbQuery(`❌ Неверно! -1 жизнь. Осталось: ${state.lives}`);
-  }
-  
-  if (state.lives > 0) {
-    setTimeout(() => sendWordGameQuestion(ctx), 1000);
-  } else {
-    await endWordGame(ctx);
-  }
-});
-
-// Завершение игры
-async function endWordGame(ctx) {
-  const state = userStates.get(ctx.from.id);
-  if (!state) return;
-  
-  await ctx.reply(
-    `*🎮 Игра окончена!*\n\n` +
-    `🏆 *Итоговый счёт:* ${state.score} очков\n` +
-    `🔥 *Лучшая серия:* ${state.maxStreak} правильных подряд\n` +
-    `📊 *Всего вопросов:* ${Math.floor(state.score / 10)}\n\n` +
-    `Хочешь сыграть ещё?`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          { text: '🔄 Играть снова', callback_data: 'restart_game' },
-          { text: '🏠 Главное меню', callback_data: 'main_menu' }
-        ]
-      ])
-    }
-  );
-  
-  userStates.delete(ctx.from.id);
-}
-
-// Показать статистику
-async function showStats(ctx) {
-  const userId = ctx.from.id;
-  const state = userStates.get(userId);
-  
-  let statsText = '*📊 Твоя статистика*\n\n';
-  
-  if (state) {
-    if (state.mode === 'quiz') {
-      statsText += `🎯 *Викторина:* ${state.score}/${state.total}\n`;
-      if (state.total > 0) {
-        statsText += `✅ Процент правильных: ${Math.round((state.score / state.total) * 100)}%\n`;
-      }
-    }
-    if (state.mode === 'flashcards') {
-      statsText += `📚 *Карточки:* ${state.correct}/${state.total}\n`;
-    }
-    if (state.mode === 'wordgame') {
-      statsText += `🎮 *Игра:* ${state.score} очков\n`;
-      statsText += `🔥 Лучшая серия: ${state.maxStreak}\n`;
-    }
-  }
-  
-  statsText += `\n📖 *Всего слов в базе:* ${words.length}\n`;
-  statsText += `🗂️ *Категорий:* ${getCategories().length}\n\n`;
-  statsText += `💪 Продолжай в том же духе!`;
-  
-  await ctx.reply(statsText, { 
-    parse_mode: 'Markdown',
-    ...mainMenu 
-  });
-}
-
-// Вспомогательная функция для отправки карточки слова
-async function sendWordCard(ctx, word) {
-  await ctx.reply(
-    `*🔤 Новое слово!*\n\n` +
+  await ctx.replyWithMarkdown(
+    `*🔤 Новое слово для изучения:*\n\n` +
     `${word.emoji || '📝'} *${word.hanzi}*\n` +
     `🗣️ *${word.pinyin}*\n` +
     `🇷🇺 *${word.translation}*\n\n` +
     `📝 *Пример:* ${word.example || '—'}\n` +
     `🏷️ *Категория:* ${word.category}\n` +
-    `⭐ *Сложность:* ${'★'.repeat(word.difficulty || 1)}`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          { text: '📚 Ещё слово', callback_data: 'another_word' },
-          { text: '🎯 Викторина с этим словом', callback_data: `quiz_word_${word.hanzi}` }
-        ]
-      ])
-    }
+    `⭐ *Сложность:* ${'★'.repeat(word.difficulty || 1)}${'☆'.repeat(3 - (word.difficulty || 1))}`,
+    keyboard
   );
 }
 
-// Обработчики для кнопок
-bot.action('another_word', async (ctx) => {
-  const word = getRandomWord();
-  await sendWordCard(ctx, word);
-});
-
-bot.action('restart_cards', async (ctx) => {
-  await startFlashcards(ctx);
-});
-
-bot.action('start_quiz', async (ctx) => {
-  await startQuiz(ctx);
-});
-
-bot.action('end_quiz', async (ctx) => {
-  const state = userStates.get(ctx.from.id);
-  let resultText = '*🎯 Викторина завершена!*\n\n';
+// Функция карточек
+async function startCards(ctx) {
+  const sessionId = ctx.from.id;
+  sessions.set(sessionId, {
+    mode: 'cards',
+    index: 0,
+    correct: 0,
+    total: 0,
+    words: [...words].sort(() => Math.random() - 0.5)
+  });
   
-  if (state) {
-    resultText += `📊 *Итоговый счёт:* ${state.score}/${state.total}\n`;
-    if (state.total > 0) {
-      resultText += `✅ *Процент правильных:* ${Math.round((state.score / state.total) * 100)}%\n`;
-    }
-    
-    if (state.questions.length > 0) {
-      resultText += `\n*📝 Разбор ошибок:*\n`;
-      state.questions.forEach((q, i) => {
-        if (!q.correct) {
-          resultText += `\n${i + 1}. ${q.word.hanzi} — ${q.word.translation}`;
-        }
-      });
-    }
-    
-    userStates.delete(ctx.from.id);
+  await sendNextCard(ctx);
+}
+
+async function sendNextCard(ctx) {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  if (!session || session.words.length === 0) {
+    return ctx.reply('📚 Все карточки пройдены!');
   }
   
-  await ctx.editMessageText(resultText, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [
-        { text: '🔄 Ещё викторина', callback_data: 'restart_quiz' },
-        { text: '🏠 Главное меню', callback_data: 'main_menu' }
-      ]
+  const word = session.words[session.index];
+  
+  await ctx.replyWithMarkdown(
+    `*📚 Карточка ${session.index + 1}/${session.words.length}*\n\n` +
+    `🔤 *${word.hanzi}*\n` +
+    `🗣️ ${word.pinyin}\n\n` +
+    `_Нажми кнопку, чтобы увидеть перевод_`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👁️ Показать перевод', `reveal_${session.index}`)],
+      [Markup.button.callback('🏁 Завершить', 'end_cards')]
     ])
+  );
+}
+
+// Функция викторины
+async function startQuiz(ctx) {
+  const sessionId = ctx.from.id;
+  const quizWords = [...words].sort(() => Math.random() - 0.5).slice(0, 5);
+  
+  sessions.set(sessionId, {
+    mode: 'quiz',
+    score: 0,
+    current: 0,
+    words: quizWords
   });
-});
+  
+  await sendQuizQuestion(ctx);
+}
 
-bot.action('restart_quiz', async (ctx) => {
-  await startQuiz(ctx);
-});
+async function sendQuizQuestion(ctx) {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  if (!session || session.current >= session.words.length) {
+    return showQuizResults(ctx);
+  }
+  
+  const word = session.words[session.current];
+  const options = [word.translation];
+  
+  // Добавляем неверные варианты
+  while (options.length < 4) {
+    const randomWord = getRandomWord();
+    if (!options.includes(randomWord.translation)) {
+      options.push(randomWord.translation);
+    }
+  }
+  
+  // Перемешиваем
+  const shuffled = options.sort(() => Math.random() - 0.5);
+  session.currentQuestion = word.translation;
+  
+  const buttons = shuffled.map(option => 
+    [Markup.button.callback(option, `answer_${option}`)]
+  );
+  
+  await ctx.replyWithMarkdown(
+    `*🎯 Вопрос ${session.current + 1}/${session.words.length}*\n\n` +
+    `Что означает слово:\n\n` +
+    `🔤 *${word.hanzi}*\n` +
+    `🗣️ ${word.pinyin}`,
+    Markup.inlineKeyboard(buttons)
+  );
+}
 
-bot.action('restart_game', async (ctx) => {
-  await startWordGame(ctx);
-});
+// Функция категорий
+async function showCategories(ctx) {
+  const categories = getCategories();
+  const buttons = [];
+  
+  for (let i = 0; i < categories.length; i += 2) {
+    const row = [];
+    if (categories[i]) row.push(Markup.button.callback(categories[i], `cat_${categories[i]}`));
+    if (categories[i + 1]) row.push(Markup.button.callback(categories[i + 1], `cat_${categories[i + 1]}`));
+    buttons.push(row);
+  }
+  
+  buttons.push([Markup.button.callback('🏠 Главное меню', 'main_menu')]);
+  
+  await ctx.replyWithMarkdown(
+    '*🏷️ Выбери категорию:*\n\n' +
+    '👇 Нажми на кнопку с нужной темой:',
+    Markup.inlineKeyboard(buttons)
+  );
+}
 
-bot.action('end_game', async (ctx) => {
-  await endWordGame(ctx);
-});
+// Функция статистики
+async function showStats(ctx) {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  let stats = '*📊 Твоя статистика:*\n\n';
+  
+  if (session) {
+    if (session.mode === 'cards') {
+      stats += `📚 *Карточки:* ${session.correct}/${session.total} правильных\n`;
+    }
+    if (session.mode === 'quiz') {
+      stats += `🎯 *Викторина:* ${session.score}/${session.current} правильных\n`;
+    }
+  }
+  
+  stats += `\n📖 *Всего слов в базе:* ${words.length}\n`;
+  stats += `🏷️ *Категорий:* ${getCategories().length}\n\n`;
+  stats += `💪 Продолжай учиться!`;
+  
+  await ctx.replyWithMarkdown(stats);
+}
 
-bot.action('main_menu', async (ctx) => {
-  await ctx.editMessageText('Выбери действие:', mainMenu);
-});
+// Обработчики inline-кнопок
+bot.action('another_word', sendRandomWord);
+bot.action('main_menu', (ctx) => ctx.reply('Главное меню:', mainMenu));
 
-bot.action('back_categories', async (ctx) => {
-  await showCategories(ctx);
-});
-
-bot.action('end_cards', async (ctx) => {
-  const state = userStates.get(ctx.from.id);
-  if (state) {
+bot.action(/reveal_(\d+)/, async (ctx) => {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  const index = parseInt(ctx.match[1]);
+  
+  if (session && session.words[index]) {
+    const word = session.words[index];
     await ctx.editMessageText(
-      `📚 *Сессия карточек завершена!*\n\n` +
-      `✅ Правильных: ${state.correct}/${state.total}\n` +
-      `📊 Пройдено: ${Math.round((state.index / words.length) * 100)}%\n\n` +
-      `Хочешь продолжить?`,
+      `*📚 Карточка ${index + 1}/${session.words.length}*\n\n` +
+      `🔤 *${word.hanzi}*\n` +
+      `🗣️ ${word.pinyin}\n` +
+      `🇷🇺 *${word.translation}*\n\n` +
+      `📝 ${word.example || ''}\n\n` +
+      `_Это слово было сложным?_`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
-            { text: '🔄 Продолжить', callback_data: 'restart_cards' },
-            { text: '🎯 Викторина', callback_data: 'start_quiz' }
+            Markup.button.callback('✅ Легко', `easy_${index}`),
+            Markup.button.callback('😐 Нормально', `medium_${index}`),
+            Markup.button.callback('❌ Сложно', `hard_${index}`)
           ],
-          [{ text: '🏠 Главное меню', callback_data: 'main_menu' }]
+          [Markup.button.callback('➡️ Далее', 'next_card')]
         ])
       }
     );
-    userStates.delete(ctx.from.id);
   }
 });
 
-// POST-обработчик для Telegram webhook
+bot.action('next_card', async (ctx) => {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  if (session) {
+    session.index++;
+    if (session.index >= session.words.length) {
+      await ctx.editMessageText(
+        `🎉 *Все карточки пройдены!*\n\n` +
+        `📊 Результат: ${session.correct}/${session.total}\n\n` +
+        `Хочешь повторить?`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔄 Ещё раз', 'start_cards')],
+            [Markup.button.callback('🏠 В меню', 'main_menu')]
+          ])
+        }
+      );
+      sessions.delete(sessionId);
+    } else {
+      await sendNextCard(ctx);
+    }
+  }
+});
+
+bot.action(/answer_(.+)/, async (ctx) => {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  const answer = ctx.match[1];
+  
+  if (session && session.currentQuestion) {
+    const isCorrect = answer === session.currentQuestion;
+    const word = session.words[session.current];
+    
+    if (isCorrect) {
+      session.score++;
+      await ctx.answerCbQuery('✅ Верно!');
+    } else {
+      await ctx.answerCbQuery(`❌ Правильно: ${session.currentQuestion}`);
+    }
+    
+    await ctx.editMessageText(
+      `*${isCorrect ? '✅ Правильно!' : '❌ Неверно'}*\n\n` +
+      `🔤 ${word.hanzi}\n` +
+      `🗣️ ${word.pinyin}\n` +
+      `🇷🇺 *${word.translation}*\n\n` +
+      `📝 ${word.example || ''}\n\n` +
+      `📊 Счёт: ${session.score}/${session.current + 1}`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('➡️ Следующий вопрос', 'next_question')]
+        ])
+      }
+    );
+    
+    session.current++;
+  }
+});
+
+bot.action('next_question', async (ctx) => {
+  await sendQuizQuestion(ctx);
+});
+
+bot.action(/cat_(.+)/, async (ctx) => {
+  const category = ctx.match[1];
+  const categoryWords = getWordsByCategory(category);
+  
+  if (categoryWords.length === 0) {
+    return ctx.answerCbQuery('В этой категории пока нет слов', { show_alert: true });
+  }
+  
+  const randomWord = categoryWords[Math.floor(Math.random() * categoryWords.length)];
+  
+  await ctx.editMessageText(
+    `*🏷️ Категория: ${category}*\n\n` +
+    `📊 Слов в категории: ${categoryWords.length}\n\n` +
+    `🔤 *Пример слова:*\n\n` +
+    `${randomWord.emoji || '📝'} *${randomWord.hanzi}*\n` +
+    `🗣️ ${randomWord.pinyin}\n` +
+    `🇷🇺 ${randomWord.translation}`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('🎯 Викторина по теме', `cat_quiz_${category}`),
+          Markup.button.callback('📚 Все слова', `cat_all_${category}`)
+        ],
+        [Markup.button.callback('🔙 Назад', 'back_cats')]
+      ])
+    }
+  );
+});
+
+bot.action('back_cats', showCategories);
+bot.action('start_cards', startCards);
+bot.action('end_cards', async (ctx) => {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  if (session) {
+    await ctx.editMessageText(
+      `📚 *Сессия завершена*\n\n` +
+      `✅ Правильных ответов: ${session.correct}\n` +
+      `📊 Всего карточек: ${session.index}\n\n` +
+      `🏁 Возвращайся к учёбе!`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 В меню', 'main_menu')]
+        ])
+      }
+    );
+    sessions.delete(sessionId);
+  }
+});
+
+async function showQuizResults(ctx) {
+  const sessionId = ctx.from.id;
+  const session = sessions.get(sessionId);
+  
+  if (session) {
+    const percentage = Math.round((session.score / session.words.length) * 100);
+    let emoji = '😊';
+    if (percentage >= 80) emoji = '🎉';
+    if (percentage >= 60) emoji = '👍';
+    if (percentage < 40) emoji = '😔';
+    
+    await ctx.replyWithMarkdown(
+      `*🎯 Викторина завершена!* ${emoji}\n\n` +
+      `📊 *Результат:* ${session.score}/${session.words.length}\n` +
+      `✅ *Процент правильных:* ${percentage}%\n\n` +
+      `💪 ${
+        percentage >= 80 ? 'Отлично! Ты молодец!' :
+        percentage >= 60 ? 'Хороший результат!' :
+        percentage >= 40 ? 'Нормально, продолжай учиться!' :
+        'Повтори слова и попробуй ещё раз!'
+      }`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Новая викторина', 'start_quiz')],
+        [Markup.button.callback('🏠 В меню', 'main_menu')]
+      ])
+    );
+    
+    sessions.delete(sessionId);
+  }
+}
+
+// Обработка ошибок
+bot.catch((err, ctx) => {
+  console.error(`Ошибка для ${ctx.updateType}:`, err);
+  if (ctx.chat) {
+    ctx.reply('❌ Произошла ошибка. Попробуй ещё раз.');
+  }
+});
+
+// Vercel handler
 export async function POST(request) {
   try {
-    const update = await request.json();
-    await bot.handleUpdate(update);
+    // Подавляем предупреждения для production
+    if (process.env.VERCEL_ENV === 'production') {
+      const originalEmit = process.emit;
+      process.emit = function (event, ...args) {
+        if (event === 'warning') {
+          return false; // Игнорируем предупреждения
+        }
+        return originalEmit.apply(process, [event, ...args]);
+      };
+    }
+    
+    const body = await request.json();
+    await bot.handleUpdate(body);
+    
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
     console.error('Bot error:', error);
-    return new Response(JSON.stringify({ error: 'Internal error' }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 }
 
-// GET для проверки
 export async function GET() {
-  return new Response(JSON.stringify({ 
-    status: 'Telegram bot webhook ready',
-    features: [
-      '🎲 Случайные слова',
-      '🎯 Викторины',
-      '📚 Карточки для запоминания',
-      '🗂️ Изучение по категориям',
-      '🎮 Игра "Угадай слово"',
-      '📊 Статистика прогресса'
-    ]
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
-  });
+  return new Response(
+    JSON.stringify({
+      status: 'Bot is running on Vercel',
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        POST: '/api/bot - Telegram webhook'
+      },
+      info: {
+        total_words: words.length,
+        categories: getCategories().length
+      }
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    }
+  );
 }
