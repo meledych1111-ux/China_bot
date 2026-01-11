@@ -1,12 +1,11 @@
 {
   "name": "chinese-learning-bot",
   "version": "1.0.0",
-  "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev"
+    "dev": "echo 'No dev server needed'"
   },
   "dependencies": {
-    "next": "latest",
     "telegraf": "^4.16.3"
   }
 }
