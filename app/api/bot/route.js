@@ -4,16 +4,13 @@ import {
   words,
   getRandomWord,
   getWordsByCategory,
-  getCategories
+  getCategories,
+  removeEmojis  // ДОБАВЬТЕ ЭТО
 } from '../../../lib/words.js';
-
-function removeEmojis(str) {
-  return str.replace(/[\u{1F300}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-}
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// === Главное меню (полное!) ===
+// === Главное меню ===
 const mainMenu = Markup.keyboard([
   ['🔤 Случайное слово', '📚 Карточки'],
   ['🎯 Викторина', '🏷️ Категории'],
@@ -73,11 +70,45 @@ bot.hears('🔤 Случайное слово', async (ctx) => {
   );
 });
 
-// Обработка кнопок
-bot.action('another_word', (ctx) => ctx.scene.enter('random_word'));
-bot.action('start_quiz', (ctx) => ctx.scene.enter('quiz'));
+// Обработка кнопок "Знаю" и "Учу"
+bot.action(/know_(.+)/, async (ctx) => {
+  const hanzi = ctx.match[1];
+  await ctx.answerCbQuery(`✅ Отлично! "${hanzi}" добавлено в изученные`);
+});
 
-// === Одновопросная викторина (без сессии) ===
+bot.action(/learn_(.+)/, async (ctx) => {
+  const hanzi = ctx.match[1];
+  await ctx.answerCbQuery(`📝 "${hanzi}" добавлено для повторения`);
+});
+
+// Обработка "Ещё слово"
+bot.action('another_word', async (ctx) => {
+  await ctx.deleteMessage();
+  // Эмулируем нажатие кнопки "Случайное слово"
+  const mockUpdate = {
+    message: { 
+      text: '🔤 Случайное слово', 
+      from: ctx.from, 
+      chat: ctx.chat 
+    }
+  };
+  await bot.handleUpdate(mockUpdate);
+});
+
+// Обработка "Начать викторину"
+bot.action('start_quiz', async (ctx) => {
+  await ctx.deleteMessage();
+  const mockUpdate = {
+    message: { 
+      text: '🎯 Викторина', 
+      from: ctx.from, 
+      chat: ctx.chat 
+    }
+  };
+  await bot.handleUpdate(mockUpdate);
+});
+
+// === Одновопросная викторина ===
 bot.hears('🎯 Викторина', async (ctx) => {
   const word = getRandomWord();
   const cleanHanzi = removeEmojis(word.hanzi);
@@ -97,10 +128,12 @@ bot.hears('🎯 Викторина', async (ctx) => {
   );
 });
 
+// Обработка ответов в викторине
 bot.action(/ans_(.+)_(.+)/, async (ctx) => {
   const userAnswer = ctx.match[1];
   const correct = ctx.match[2];
   const isCorrect = userAnswer === correct;
+  
   await ctx.answerCbQuery(isCorrect ? '✅ Верно!' : `❌ Правильно: ${correct}`);
   
   // Предложить продолжить
@@ -112,21 +145,25 @@ bot.action(/ans_(.+)_(.+)/, async (ctx) => {
   );
 });
 
-bot.action('more_quiz', (ctx) => {
-  ctx.deleteMessage().then(() => {
-    ctx.reply('🎯 Викторина', { reply_markup: { remove_keyboard: true } })
-      .then(() => {
-        // Эмуляция нажатия кнопки
-        bot.handleUpdate({ message: { text: '🎯 Викторина', from: ctx.from, chat: ctx.chat } });
-      });
-  });
+// "Ещё вопрос" в викторине
+bot.action('more_quiz', async (ctx) => {
+  await ctx.deleteMessage();
+  const mockUpdate = {
+    message: { 
+      text: '🎯 Викторина', 
+      from: ctx.from, 
+      chat: ctx.chat 
+    }
+  };
+  await bot.handleUpdate(mockUpdate);
 });
 
-bot.action('back_menu', (ctx) => {
-  ctx.editMessageText('Главное меню:', mainMenu);
+// Возврат в меню
+bot.action('back_menu', async (ctx) => {
+  await ctx.editMessageText('Главное меню:', mainMenu);
 });
 
-// === Карточки (одна карточка за раз) ===
+// === Карточки ===
 bot.hears('📚 Карточки', async (ctx) => {
   const word = getRandomWord();
   const cleanHanzi = removeEmojis(word.hanzi);
@@ -144,18 +181,26 @@ bot.hears('📚 Карточки', async (ctx) => {
   );
 });
 
+// Показать перевод карточки
 bot.action(/reveal_(.+)_(.+)/, (ctx) => {
   const translation = ctx.match[2];
   ctx.answerCbQuery(`🇷🇺 ${translation}`, { show_alert: true });
 });
 
-bot.action('next_card', (ctx) => {
-  ctx.deleteMessage().then(() => {
-    bot.handleUpdate({ message: { text: '📚 Карточки', from: ctx.from, chat: ctx.chat } });
-  });
+// Следующая карточка
+bot.action('next_card', async (ctx) => {
+  await ctx.deleteMessage();
+  const mockUpdate = {
+    message: { 
+      text: '📚 Карточки', 
+      from: ctx.from, 
+      chat: ctx.chat 
+    }
+  };
+  await bot.handleUpdate(mockUpdate);
 });
 
-// === Категории (как раньше) ===
+// === Категории ===
 bot.hears('🏷️ Категории', async (ctx) => {
   const cats = getCategories();
   const buttons = cats.map(cat => [
@@ -172,7 +217,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
   await ctx.answerCbQuery(`${word.hanzi} — ${word.translation}`);
 });
 
-// === Статистика (общая, без персональных данных) ===
+// === Статистика ===
 bot.hears('📊 Статистика', (ctx) => {
   const total = words.length;
   const cats = getCategories().length;
@@ -183,7 +228,7 @@ bot.hears('📊 Статистика', (ctx) => {
   );
 });
 
-// === Webhook ===
+// === Webhook обработчик ===
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
