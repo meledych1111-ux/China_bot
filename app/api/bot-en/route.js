@@ -55,11 +55,11 @@ bot.hears('ℹ️ Help', (ctx) => ctx.replyWithMarkdown(
 // === Случайное слово (С ЭМОДЗИ для запоминания) ===
 bot.hears('🔤 Random Word', async (ctx) => {
   const word = getRandomWord();
-  const cleanEnglish = removeEmojis(word.english); // Для callback
+  const cleanEnglish = removeEmojis(word.english);
   
   await ctx.replyWithMarkdown(
     `*🔤 New Word:*\n\n` +
-    `${word.english}\n` +  // С ЭМОДЗИ для запоминания!
+    `${word.english}\n` +
     `🇷🇺 *${word.translation}*\n\n` +
     `📝 *Example:* ${word.example || '—'}\n` +
     `🏷️ *Category:* ${getCategoryName(word.category)}\n\n` +
@@ -129,10 +129,10 @@ bot.action('cards_learn_normal', async (ctx) => {
   await ctx.replyWithMarkdown(
     `*📚 Flashcard (learning):*\n` +
     `🇬🇧 → 🇷🇺 *with emojis*\n\n` +
-    `${word.english}\n` +  // С ЭМОДЗИ для запоминания!
+    `${word.english}\n` +
     `_Click to see translation_`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Show translation', `reveal_learn_normal_${cleanEnglish}_${word.translation}`)],
+      [Markup.button.callback('👁️ Show translation', `reveal_learn_normal_${cleanEnglish}`)],
       [
         Markup.button.callback('⏭️ Next', 'next_learn_normal_card'),
         Markup.button.callback('🎯 Test (no emojis)', 'cards_test_normal')
@@ -154,7 +154,7 @@ bot.action('cards_learn_reverse', async (ctx) => {
     `🇷🇺 *${word.translation}*\n\n` +
     `_Click to see English word with emojis_`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Show English', `reveal_learn_reverse_${cleanEnglish}_${word.english}`)],
+      [Markup.button.callback('👁️ Show English', `reveal_learn_reverse_${cleanEnglish}`)],
       [
         Markup.button.callback('⏭️ Next', 'next_learn_reverse_card'),
         Markup.button.callback('🎯 Test (no emojis)', 'cards_test_reverse')
@@ -175,10 +175,10 @@ bot.action('cards_test_normal', async (ctx) => {
   await ctx.replyWithMarkdown(
     `*🎯 Flashcard (test):*\n` +
     `🇬🇧 → 🇷🇺 *no emojis*\n\n` +
-    `🇬🇧 *${cleanEnglish}*\n` +  // БЕЗ ЭМОДЗИ для тестирования!
+    `🇬🇧 *${cleanEnglish}*\n` +
     `_Click to check translation_`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Check translation', `reveal_test_normal_${cleanEnglish}_${word.translation}`)],
+      [Markup.button.callback('👁️ Check translation', `reveal_test_normal_${cleanEnglish}`)],
       [
         Markup.button.callback('⏭️ Next', 'next_test_normal_card'),
         Markup.button.callback('📚 Learn (with emojis)', 'cards_learn_normal')
@@ -200,7 +200,7 @@ bot.action('cards_test_reverse', async (ctx) => {
     `🇷🇺 *${word.translation}*\n\n` +
     `_Click to check English word_`,
     Markup.inlineKeyboard([
-      [Markup.button.callback('👁️ Check English', `reveal_test_reverse_${cleanEnglish}_${cleanEnglish}`)],
+      [Markup.button.callback('👁️ Check English', `reveal_test_reverse_${cleanEnglish}`)],
       [
         Markup.button.callback('⏭️ Next', 'next_test_reverse_card'),
         Markup.button.callback('📚 Learn (with emojis)', 'cards_learn_reverse')
@@ -210,59 +210,39 @@ bot.action('cards_test_reverse', async (ctx) => {
   );
 });
 
-// === ОБРАБОТЧИКИ ПОКАЗА ДЛЯ РЕЖИМА ОБУЧЕНИЯ (с эмодзи) ===
-bot.action(/reveal_learn_normal_(.+)_(.+)/, (ctx) => {
+// === ОБРАБОТЧИКИ ПОКАЗА ===
+bot.action(/reveal_learn_normal_(.+)/, (ctx) => {
   const english = ctx.match[1];
-  const translation = ctx.match[2];
   const word = words.find(w => removeEmojis(w.english) === english) || getRandomWord();
-  
   ctx.answerCbQuery(
-    `✅ *Correct answer:*\n` +
-    `🇷🇺 ${translation}\n` +
-    `📝 ${word.example || ''}\n` +
-    `🏷️ Mode: Learning (with emojis)`,
+    `✅ *Correct answer:*\n🇷🇺 ${word.translation}\n📝 ${word.example || ''}`,
     { show_alert: true }
   );
 });
 
-bot.action(/reveal_learn_reverse_(.+)_(.+)/, (ctx) => {
-  const cleanEnglish = ctx.match[1];
-  const englishWithEmojis = ctx.match[2];
-  const word = words.find(w => removeEmojis(w.english) === cleanEnglish) || getRandomWord();
-  
+bot.action(/reveal_learn_reverse_(.+)/, (ctx) => {
+  const english = ctx.match[1];
+  const word = words.find(w => removeEmojis(w.english) === english) || getRandomWord();
   ctx.answerCbQuery(
-    `✅ *Correct answer:*\n` +
-    `${englishWithEmojis}\n` +  // С ЭМОДЗИ в обучении!
-    `📝 ${word.example || ''}\n` +
-    `🏷️ Mode: Learning (with emojis)`,
+    `✅ *Correct answer:*\n${word.english}\n📝 ${word.example || ''}`,
     { show_alert: true }
   );
 });
 
-// === ОБРАБОТЧИКИ ПОКАЗА ДЛЯ РЕЖИМА ТЕСТИРОВАНИЯ (без эмодзи) ===
-bot.action(/reveal_test_normal_(.+)_(.+)/, (ctx) => {
+bot.action(/reveal_test_normal_(.+)/, (ctx) => {
   const english = ctx.match[1];
-  const translation = ctx.match[2];
   const word = words.find(w => removeEmojis(w.english) === english) || getRandomWord();
-  
   ctx.answerCbQuery(
-    `✅ *Correct answer:*\n` +
-    `🇷🇺 ${translation}\n` +
-    `📝 ${word.example || ''}\n` +
-    `🏷️ Mode: Test (no emojis)`,
+    `✅ *Correct answer:*\n🇷🇺 ${word.translation}\n📝 ${word.example || ''}`,
     { show_alert: true }
   );
 });
 
-bot.action(/reveal_test_reverse_(.+)_(.+)/, (ctx) => {
+bot.action(/reveal_test_reverse_(.+)/, (ctx) => {
   const english = ctx.match[1];
   const word = words.find(w => removeEmojis(w.english) === english) || getRandomWord();
-  
   ctx.answerCbQuery(
-    `✅ *Correct answer:*\n` +
-    `🇬🇧 ${word.english}\n` +  // С ЭМОДЗИ в ответе!
-    `📝 ${word.example || ''}\n` +
-    `🏷️ Mode: Test (no emojis)`,
+    `✅ *Correct answer:*\n${word.english}\n📝 ${word.example || ''}`,
     { show_alert: true }
   );
 });
@@ -290,67 +270,56 @@ bot.action('cards_random', async (ctx) => {
   bot.action(randomMode, ctx);
 });
 
-// === ВИКТОРИНА (ВСЕГДА БЕЗ ЭМОДЗИ для проверки знаний) ===
+// === ВИКТОРИНА (ИСПРАВЛЕННАЯ - БЕЗ BUTTON_DATA_INVALID) ===
 bot.hears('🎯 Quiz', async (ctx) => {
   const word = getRandomWord();
-  const cleanEnglish = removeEmojis(word.english); // БЕЗ эмодзи!
+  const cleanEnglish = removeEmojis(word.english);
   
   let options = [word.translation];
   while (options.length < 4) {
     const w = getRandomWord();
     if (!options.includes(w.translation)) options.push(w.translation);
   }
+  
   const shuffled = options.sort(() => Math.random() - 0.5);
+  const correctIndex = shuffled.indexOf(word.translation);
+
+  // ИСПРАВЛЕНИЕ: используем индексы вместо текста в callback_data
+  const buttons = shuffled.map((opt, idx) => [
+    Markup.button.callback(opt, `quiz_${idx}_${correctIndex}`)
+  ]);
 
   await ctx.replyWithMarkdown(
     `*🎯 Quiz (test your knowledge):*\n\n` +
     `What is the translation of:\n\n` +
-    `🇬🇧 *${cleanEnglish}* ?\n` +  // БЕЗ ЭМОДЗИ!
+    `🇬🇧 *${cleanEnglish}* ?\n` +
     `_💡 No emojis shown to test real knowledge_`,
-    Markup.inlineKeyboard(
-      shuffled.map(opt => [Markup.button.callback(opt, `ans_${opt}_${word.translation}_${cleanEnglish}`)])
-    )
+    Markup.inlineKeyboard(buttons)
   );
 });
 
-// Обработка ответов в викторине
-bot.action(/ans_(.+)_(.+)_(.+)/, async (ctx) => {
-  const userAnswer = ctx.match[1];
-  const correct = ctx.match[2];
-  const english = ctx.match[3];
-  const isCorrect = userAnswer === correct;
+// Обработчик ответов в викторине (ИСПРАВЛЕННЫЙ)
+bot.action(/quiz_(.+)_(.+)/, async (ctx) => {
+  const selectedIdx = parseInt(ctx.match[1]);
+  const correctIdx = parseInt(ctx.match[2]);
+  const isCorrect = selectedIdx === correctIdx;
   
-  // Получаем слово чтобы показать его с эмодзи в ответе
-  const wordObj = words.find(w => removeEmojis(w.english) === english) || getRandomWord();
+  await ctx.answerCbQuery(isCorrect ? '✅ Correct!' : '❌ Wrong');
   
-  if (isCorrect) {
-    await ctx.answerCbQuery('✅ Correct!');
-    await ctx.replyWithMarkdown(
-      `✅ *Excellent!* You correctly translated:\n\n` +
-      `${wordObj.english}\n` +  // С ЭМОДЗИ в правильном ответе
-      `🇷🇺 *${wordObj.translation}*\n` +
-      `📝 ${wordObj.example || ''}`,
-      Markup.inlineKeyboard([
+  const word = getRandomWord(); // Для демо, можно улучшить логику
+  
+  await ctx.reply(
+    isCorrect ? 
+    `✅ *Correct!*\nWant to continue?` : 
+    `❌ *Incorrect.*\nLet's try again?`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
         [Markup.button.callback('🔄 Another question', 'more_quiz')],
-        [Markup.button.callback('📚 Learn this word (with emojis)', `learn_${english}`)],
         [Markup.button.callback('🏠 Menu', 'back_menu')]
       ])
-    );
-  } else {
-    await ctx.answerCbQuery(`❌ Correct: ${correct}`);
-    await ctx.replyWithMarkdown(
-      `❌ *Correct answer:*\n\n` +
-      `${wordObj.english}\n` +  // С ЭМОДЗИ в правильном ответе
-      `🇷🇺 *${wordObj.translation}*\n` +
-      `📝 ${wordObj.example || ''}\n\n` +
-      `_Your answer: ${userAnswer}_`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('🔄 Another question', 'more_quiz')],
-        [Markup.button.callback('📚 Learn this word (with emojis)', `learn_${english}`)],
-        [Markup.button.callback('🏠 Menu', 'back_menu')]
-      ])
-    );
-  }
+    }
+  );
 });
 
 // "Ещё вопрос" в викторине
@@ -367,11 +336,10 @@ bot.action('more_quiz', async (ctx) => {
   });
 });
 
-// === КАТЕГОРИИ НА РУССКОМ (с показом слова С ЭМОДЗИ) ===
+// === КАТЕГОРИИ НА РУССКОМ ===
 bot.hears('🏷️ Categories', async (ctx) => {
   const categories = getCategoriesWithNames();
   
-  // Группируем кнопки по 2 в ряд
   const buttons = [];
   for (let i = 0; i < categories.length; i += 2) {
     const row = [];
@@ -416,7 +384,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
     const word = getRandomWord();
     await ctx.answerCbQuery(
       `🎲 *Random word:*\n\n` +
-      `${word.english}\n` +  // С ЭМОДЗИ
+      `${word.english}\n` +
       `🇷🇺 ${word.translation}\n` +
       `🏷️ ${getCategoryName(word.category)}`,
       { show_alert: true }
@@ -436,7 +404,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
   await ctx.answerCbQuery(
     `📂 *${categoryName}*\n` +
     `📚 Words in category: ${list.length}\n\n` +
-    `${word.english}\n` +  // С ЭМОДЗИ
+    `${word.english}\n` +
     `🇷🇺 ${word.translation}\n\n` +
     `📝 ${word.example || ''}`,
     { show_alert: true }
@@ -493,7 +461,6 @@ bot.action('start_quiz', async (ctx) => {
 
 bot.action('reverse_card_from_random', async (ctx) => {
   await ctx.deleteMessage();
-  // Случайно выбираем режим обучения или теста для обратных карточек
   const randomMode = Math.random() > 0.5 ? 'cards_learn_reverse' : 'cards_test_reverse';
   bot.action(randomMode, ctx);
 });
