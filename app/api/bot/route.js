@@ -4,9 +4,13 @@ import {
   words,
   getRandomWord,
   getWordsByCategory,
-  getCategories,
-  removeEmojis
+  getCategories
 } from '../../../lib/words.js';
+
+// Утилита: убрать эмодзи (определяем локально, чтобы избежать ошибок импорта)
+function removeEmojis(str) {
+  return str.replace(/[\u{1F300}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+}
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -15,7 +19,7 @@ const mainMenu = Markup.keyboard([
   ['🏷️ Категории']
 ]).resize();
 
-// === Случайное слово (показывает с эмодзи) ===
+// === Случайное слово (с эмодзи) ===
 bot.hears('🔤 Случайное слово', async (ctx) => {
   const word = getRandomWord();
   await ctx.replyWithMarkdown(
@@ -26,10 +30,10 @@ bot.hears('🔤 Случайное слово', async (ctx) => {
   );
 });
 
-// === Викторина (убирает эмодзи из вопроса!) ===
+// === Викторина (эмодзи убраны из вопроса!) ===
 bot.hears('🎯 Викторина', async (ctx) => {
   const correctWord = getRandomWord();
-  const cleanHanzi = removeEmojis(correctWord.hanzi); // ← ЭМОДЗИ УБРАНЫ!
+  const cleanHanzi = removeEmojis(correctWord.hanzi); // ← Только чистый ханьцзы
 
   let options = [correctWord.translation];
   while (options.length < 4) {
@@ -39,7 +43,7 @@ bot.hears('🎯 Викторина', async (ctx) => {
   const shuffled = options.sort(() => Math.random() - 0.5);
 
   await ctx.replyWithMarkdown(
-    `Что означает слово:\n\n*${cleanHanzi}*?`, // ← Только чистый ханьцзы
+    `Что означает слово:\n\n*${cleanHanzi}*?`,
     Markup.inlineKeyboard(
       shuffled.map(opt => [
         Markup.button.callback(opt, `quiz_${opt}_${correctWord.translation}`)
@@ -48,6 +52,7 @@ bot.hears('🎯 Викторина', async (ctx) => {
   );
 });
 
+// Обработка ответа
 bot.action(/quiz_(.+)_(.+)/, async (ctx) => {
   const userAnswer = ctx.match[1];
   const correct = ctx.match[2];
@@ -72,11 +77,12 @@ bot.action(/cat_(.+)/, async (ctx) => {
   await ctx.answerCbQuery(`${word.hanzi} — ${word.translation}`);
 });
 
-// === Start & Webhook ===
+// === Start ===
 bot.start((ctx) => {
   ctx.reply('🇨🇳 Привет! Учись китайским словам.', mainMenu);
 });
 
+// === Webhook handlers ===
 export const dynamic = 'force-dynamic';
 
 export async function POST(request) {
@@ -84,14 +90,18 @@ export async function POST(request) {
     const body = await request.json();
     await bot.handleUpdate(body);
     return new Response(null, { status: 200 });
-  } catch (e) {
-    console.error('Error:', e);
+  } catch (error) {
+    console.error('Bot error:', error);
     return new Response(null, { status: 500 });
   }
 }
 
 export async function GET() {
-  return new Response(JSON.stringify({ ok: true, words: words.length }), {
+  return new Response(JSON.stringify({
+    ok: true,
+    words: words.length,
+    categories: getCategories().length
+  }), {
     headers: { 'Content-Type': 'application/json' }
   });
 }
