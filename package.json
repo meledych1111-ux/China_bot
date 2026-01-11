@@ -1,26 +1,9 @@
 {
-  "name": "chinese-learning-bot",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
   "dependencies": {
     "@upstash/redis": "^1.35.0",
+    "telegraf": "^4.16.3",
     "next": "16.1.1",
     "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "telegraf": "^4.16.3",
-    "telegraf-session-redis": "^2.0.0"
-  },
-  "devDependencies": {
-    "eslint": "^8.57.0",
-    "eslint-config-next": "16.1.1"
-  },
-  "engines": {
-    "node": ">=18"
+    "react-dom": "19.0.0"
   }
 }
