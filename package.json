@@ -1,0 +1,12 @@
+{
+  "name": "chinese-learning-bot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev"
+  },
+  "dependencies": {
+    "next": "latest",
+    "telegraf": "^4.16.3"
+  }
+}
