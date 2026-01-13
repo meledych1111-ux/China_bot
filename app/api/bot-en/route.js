@@ -11,7 +11,7 @@ import {
 } from '../../../lib/words-en.js';
 const bot = new Telegraf(process.env.BOT_TOKEN_EN);
 
-// === Главное меню ===
+// ===  меню ===
 const mainMenu = Markup.keyboard([
   ['🔤 Random Word', '📚 Flashcards'],
   ['🎯 Quiz', '🏷️ Categories'],
